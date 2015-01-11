@@ -3,8 +3,8 @@ Contributors: bgentry
 Donate link:https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=MRKES4
 Tags: custom content, query variables, urls
 Requires at least: 3.0
-Tested up to: 3.7.1
-Stable tag: 1.0
+Tested up to: 4.1
+Stable tag: 1.1
 
 Create dynamic pages using parameters in the url, such as example.com/my-post?username=Bob
 
