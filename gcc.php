@@ -3,7 +3,7 @@
 Plugin Name: GET Custom Content
 Plugin URI: http://bryangentry.us/get-custom-content-wordpress-plugin/
 Description: Add customized content to your WordPress website using GET variables in the URL
-Version: 1.0
+Version: 1.1
 Author: bgentry
 Author URI: http://bryangentry.us
 License: GPL2
@@ -11,37 +11,108 @@ License: GPL2
 
 add_shortcode('bg_gcc', 'bg_get_cc');
 
+function bg_get_cc_find_value_to_use ( $content, $queryvar ) {
+    
+        $term = get_term_by( 'name', $queryvar, 'bg_gcc_vars');
+	if ( isset($_GET[$queryvar]) ) {
+			if ( strpos( $content, '-value-'.$_GET[$queryvar] ) !==false ) {
+				$contentSplit = explode('-value-'.$_GET[$queryvar], $content);
+				$value = $contentSplit[1];
+			}
+                        elseif ( strpos ($content, '_value_') !==false ) {
+				$value = strip_tags($_GET[$queryvar]);
+			}
+                        //the user isn't overriding or inserting the value, so let's look up the actual value
+                        else {
+                                //make sure the variable given actually exists
+				if ( $term ) {
+                                        //it exists, so let's find out whether we are inserting the query variable's value
+                                    if ( strpos( $term->description, '_value_' ) ) {
+                                            $value = strip_tags($_GET[$queryvar]);
+                                        }
+                                        else {
+                                            //we're not just inserting the GET value, so let's look up the pre-defined value
+                                            $valuePost = get_page_by_title( $_GET[$queryvar], 'OBJECT', 'bg_gcc_values' );
+                                            if ( $valuePost!==NULL and has_term( $term->name, 'bg_gcc_vars', $valuePost ) ) {
+                                                    //this value has been defined, so let's use its content
+                                                    $value = $valuePost->post_content;
+                                            }
+                                            elseif ( $value == NULL ) {
+                                                    //it doesn't exist, so we'll just use the default
+                                                    $value = bgg_get_default_for_variable( $content, $queryvar );
+                                            }
+                                        }
+                                } else {
+                                    //um, this GCC variable doesn't even exist. These are not the droids you are looking for. Move along.
+                                    return NULL;
+                                }
+				
+			} 
+                       
+                  } else {
+                            $value = bgg_get_default_for_variable( $content, $queryvar );
+			}
+    
+              return $value;          
+    
+}
+
+
+function choose_display_of_custom_content( $content, $queryvar, $value ) {
+    //now let's insert and / or format the value
+                        if ( isset($value )) {
+                            if ( strpos ($content, '_value_') !==false ) {
+                                $value = strip_tags($_GET[$queryvar]);
+                                $return = str_replace('_value_', $value, $content);
+                            }
+                            elseif ( strpos( $term->description, '_value_' ) ) {
+                                $value = strip_tags($_GET[$queryvar]);
+                                $return = str_replace('_value_', $value, $term->description);
+                            } else {
+                                $return = $value;
+                            }
+                        }
+                  return $return;
+}
+
+
 function bg_get_cc( $atts, $content = null ) {
 	$queryvar = $atts['variable'];
-	$return = '';
-	if ( isset($_GET[$queryvar]) ) {
-			if ( strpos( $content, '-value-'.$_GET[$queryvar] ) ) {
-				$contentSplit = explode('-value-'.$_GET[$queryvar], $content);
-				$return = wpautop($contentSplit[1]);
-			} elseif ( strpos ($content, '_value_') ) {
-				$value = strip_tags($_GET[$queryvar]);
-				$return = wpautop(str_replace('_value_', $value, $content));
-			}	else {
-				//var_dump( strpos ($content, '-value-') );
-				$term = get_term_by( 'name', $queryvar, 'bg_gcc_vars');
-				if ( $term ) {
-					$value = get_page_by_title( $_GET[$queryvar], 'OBJECT', 'bg_gcc_values' );
-					if ( $value and has_term( $term->name, 'bg_gcc_vars', $value ) ) {
-						$return = wpautop($value->post_content);				
-					} elseif ( strpos( $term->description, '_value_' ) ) {
-						$value = strip_tags($_GET[$queryvar]);
-						$return = wpautop(str_replace('_value_', $value, $term->description));
+        
+        $value = bg_get_cc_find_value_to_use( $content, $queryvar );
+                        
+        $return = choose_display_of_custom_content( $content, $queryvar, $value );
+                
+	return do_shortcode( wpautop( $return) );	
+}
+
+        
+function bgg_get_default_for_variable( $content, $queryvar ) {
+				//the value is not defined, let's see if we have the default
+				if ( strpos( $content, '-value-default' ) ) {
+					$contentSplit = explode('-value-default', $content);
+					$return = wpautop( $contentSplit[1] );
+                                        
+				} else {
+					$default = get_posts( 
+										array(
+											'posts_per_page'=> 1
+											,'post_type' => 'bg_gcc_values'
+											,'bg_gcc_vars' => $queryvar
+											,'meta_key' => 'bg_gcc_value_default_status'
+											,'meta_value' => true
+											)
+										);
+					if ( is_array( $default ) ) {
+						$return = wpautop( $default[0]->post_content );
 					}
-							
+                                        
 				}
-				
-			}
-	return do_shortcode($return);	
-	}
-	
-	}
-	
-	// register Foo_Widget widget
+    
+return $return;    
+}
+
+//register the GCC widget
 function register_gcc_widget() {
     register_widget( 'GCCWidget' );
 }
@@ -58,30 +129,26 @@ class GCCWidget extends WP_Widget {
 
 	public function widget( $args, $instance) {
 		if ( isset ( $instance['gcc_var'] ) ) {
-			$term = get_term ( $instance['gcc_var'], 'bg_gcc_vars' );
+                    $term = get_term ( $instance['gcc_var'], 'bg_gcc_vars' );
 			if ( ! is_wp_error( $term ) ) {
-				if ( isset ($_GET[$term->name] ) ) {
-					$value = get_page_by_title( $_GET[$term->name], 'OBJECT', 'bg_gcc_values' );
-					if ( $value and has_term( $term->name, 'bg_gcc_vars', $value ) ) {
-						$title= apply_filters( 'widget_title', $instance['title'] );
-						echo $args['before_widget'];
-						if (!empty($title) ) {
-						echo $args['before_title'] . $title . $args['after_title'];
-						}
-						echo wpautop(do_shortcode($value->post_content));
-						echo $args['after_widget'];
-					} elseif ( strpos( $term->description, '_value_' ) ) {
-						$title= apply_filters( 'widget_title', $instance['title'] );
-						echo $args['before_widget'];
-						if (!empty($title) ) {
-						echo $args['before_title'] . $title . $args['after_title'];
-						}
-						$value = strip_tags($_GET[$term->name]);
-						echo wpautop(do_shortcode(str_replace('_value_', $value, $term->description)));
-					}
-				} 
-			}
+                    $queryvar = $term->name;
+                    $value = bg_get_cc_find_value_to_use( $instance['override'], $queryvar );
+                  
+                    $content = choose_display_of_custom_content( $instance['override'], $queryvar, $value );
+                    
 		} 
+                if ( isset ( $content )) {
+                    
+                    $title= apply_filters( 'widget_title', $instance['title'] );
+                    echo $args['before_widget'];
+                    if (!empty($title) ) {
+			echo $args['before_title'] . $title . $args['after_title'];
+                    }
+                    echo $content;
+                    echo $args['after_widget'];
+                    
+                }
+                }
 	}
 	
 	public function form($instance) {
@@ -106,6 +173,14 @@ class GCCWidget extends WP_Widget {
 				<?php
 			}
 			?></select>
+                            
+                            <p>
+		<label for="<?php echo $this->get_field_id( 'override' ); ?>">Want to override the defined content for any variable/value combinations in this widget? Enter the override values here:<br/> <textarea class="widefat" id="<?php echo $this->get_field_id( 'override' );?>" name="<?php echo $this->get_field_name( 'override' );?>" >
+<?php echo esc_attr( $instance['override'] ); ?>
+                    </textarea>
+		</p>
+                            
+                            
 			<p><small><strong>Love this plugin?</strong> <a target="_blank" href="https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=MRKES4XBYNDPU" title="Donate Now">Donate Now</a> to help support this and other plugins by <a href="http://bryangentry.us/" target="_blank">Bryan Gentry</a></small></p>
 			<?php
 		}
@@ -117,6 +192,7 @@ class GCCWidget extends WP_Widget {
 		$instance = array();
 		$instance['title'] = ( ! empty( $new_instance['title'] ) ) ? strip_tags( $new_instance['title'] ) : '';
 		$instance['gcc_var'] = ( ! empty( $new_instance['gcc_var'] ) ) ? $new_instance['gcc_var'] : '';
+                $instance['override'] = ( ! empty( $new_instance['override'] ) ) ? $new_instance['override'] : '';
 		return $instance;
 	}
 	
@@ -213,10 +289,12 @@ add_action( 'init', 'make_bg_gcc_post_type', 0 );
 
 }
 
+
+//register, make, and save the custom box
 function gcc_add_custom_box() {
     add_meta_box(
             'gcc_donate_box',
-            'Support GET Custom Content',
+            'Make this the Default?',
             'gcc_inner_custom_box',
             'bg_gcc_values',
 			'side',
@@ -227,14 +305,52 @@ add_action( 'add_meta_boxes', 'gcc_add_custom_box' );
 
 function gcc_inner_custom_box( $post ) {
 
-  // Add an nonce field so we can check for it later.
-  //wp_nonce_field( 'gcc_inner_custom_box', 'gcc_inner_custom_box_nonce' );
+	wp_nonce_field( 'bggcc_meta_box', 'bggcc_meta_box_nonce' );
+	$value = get_post_meta( $post->ID, 'bg_gcc_value_default_status', true );
+	$checked = ( $value == true ) ? " checked" : "";
+	echo '<label for="bggcc_default_field">';
+	_e( 'Do you want this to be the DEFAULT content that will be displayed when its associated variable is not defined?', 'bggcc_textdomain' );
+	echo '</label> ';
+	echo '<input type="checkbox" id="bggcc_default_field" name="bggcc_default_field" value="true" ' . $checked . ' />';
+        
 	?>
-	<p>Thank you for using GET Custom Content!</p>
+                        <p><strong>Support GET Custom Content!</strong></p>
 	<p>If you find this free plugin useful, please consider making a contribution to support this plugin and others by <a href="http://bryangentry.us/" target="_blank">Bryan Gentry</a>. <a target="_blank" href="https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=MRKES4XBYNDPU" title="Donate Now">Donate Now</a></p>
 	<p><strong>Need assistance</strong> with this plugin? Fill out my <a href="http://bryangentry.us/contact-me/" target="_blank">contact form</a> or post in the plugin forum on WordPress.org.</p>
 <?php	
   }
+  
+  
+  function bggcc_save_meta_box_data( $post_id ) {
+	if ( ! isset( $_POST['bggcc_meta_box_nonce'] ) ) {
+		return;
+	}
+	if ( ! wp_verify_nonce( $_POST['bggcc_meta_box_nonce'], 'bggcc_meta_box' ) ) {
+		return;
+	}
+	if ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) {
+		return;
+	}
+	if ( isset( $_POST['post_type'] ) && 'page' == $_POST['post_type'] ) {
+		if ( ! current_user_can( 'edit_page', $post_id ) ) {
+			return;
+		}
+	} else {
+		if ( ! current_user_can( 'edit_post', $post_id ) ) {
+			return;
+		}
+	}
+	
+	// Make sure that it is set.
+	if ( ! isset( $_POST['bggcc_default_field'] ) ) {
+		return;
+	}	
+
+	// Update the meta field in the database.
+	update_post_meta( $post_id, 'bg_gcc_value_default_status', true );
+}
+add_action( 'save_post', 'bggcc_save_meta_box_data' );
+
 
   
   add_action( 'bg_gcc_vars_add_form_fields', 'edit_bg_gcc_vars_fields', 10, 2);
@@ -255,6 +371,3 @@ function edit_bg_gcc_vars_fields() {
 	</script>
 	<?php
 }
-  
-  
-?>
