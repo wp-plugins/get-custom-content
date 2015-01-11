@@ -3,7 +3,7 @@
 Plugin Name: GET Custom Content
 Plugin URI: http://bryangentry.us/get-custom-content-wordpress-plugin/
 Description: Add customized content to your WordPress website using GET variables in the URL
-Version: 1.1
+Version: 1.1.1
 Author: bgentry
 Author URI: http://bryangentry.us
 License: GPL2
@@ -58,14 +58,16 @@ function bg_get_cc_find_value_to_use ( $content, $queryvar ) {
 }
 
 
-function choose_display_of_custom_content( $content, $queryvar, $value ) {
+function choose_display_of_custom_content( $content, $queryvar, $value, $term ) {
     //now let's insert and / or format the value
+    
                         if ( isset($value )) {
                             if ( strpos ($content, '_value_') !==false ) {
                                 $value = strip_tags($_GET[$queryvar]);
                                 $return = str_replace('_value_', $value, $content);
                             }
-                            elseif ( strpos( $term->description, '_value_' ) ) {
+                            elseif ( strpos( $term->description, '_value_' ) !==false ) {
+                                
                                 $value = strip_tags($_GET[$queryvar]);
                                 $return = str_replace('_value_', $value, $term->description);
                             } else {
@@ -78,10 +80,10 @@ function choose_display_of_custom_content( $content, $queryvar, $value ) {
 
 function bg_get_cc( $atts, $content = null ) {
 	$queryvar = $atts['variable'];
-        
+        $term = get_term_by( 'name', $queryvar, 'bg_gcc_vars');
         $value = bg_get_cc_find_value_to_use( $content, $queryvar );
                         
-        $return = choose_display_of_custom_content( $content, $queryvar, $value );
+        $return = choose_display_of_custom_content( $content, $queryvar, $value, $term );
                 
 	return do_shortcode( wpautop( $return) );	
 }
@@ -134,7 +136,7 @@ class GCCWidget extends WP_Widget {
                     $queryvar = $term->name;
                     $value = bg_get_cc_find_value_to_use( $instance['override'], $queryvar );
                   
-                    $content = choose_display_of_custom_content( $instance['override'], $queryvar, $value );
+                    $content = choose_display_of_custom_content( $instance['override'], $queryvar, $value, $term );
                     
 		} 
                 if ( isset ( $content )) {
