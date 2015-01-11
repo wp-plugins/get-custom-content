@@ -4,7 +4,7 @@ Donate link:https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id
 Tags: custom content, query variables, urls
 Requires at least: 3.0
 Tested up to: 4.1
-Stable tag: 1.1
+Stable tag: 1.1.1
 
 Create dynamic pages using parameters in the url, such as example.com/my-post?username=Bob
 
@@ -68,6 +68,8 @@ Greetings, _VALUE_.
 Extract the zip file and just drop the contents in the wp-content/plugins/ directory of your WordPress installation and then activate the Plugin from Plugins page.
 
 == Changelog ==
+
+1.1.1 - Fixed one error.
 
 1.1 - Added ability to set a default value for each variable. Default can be set with a meta box, overridden in shortcode. Also added ability to override pre-defined content in the widget. Cleaned up a lot of code.
 
